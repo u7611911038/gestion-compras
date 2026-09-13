@@ -1,0 +1,1003 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gestión de Compras — MASA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#1E2126; --ink-soft:#3A3F47; --paper:#F3EFE6; --paper-raised:#FFFFFF;
+    --line:#E1DACB; --amber:#D98E2B; --amber-dark:#B5721A; --cable:#2E5266; --cable-light:#5C86A0;
+    --green:#4C7A5D; --rust:#B33D1F; --rust-bg:#F7E3DA;
+  }
+  *{box-sizing:border-box;}
+  html,body{ margin:0; padding:0; height:100%; }
+  body{ font-family:'IBM Plex Sans', sans-serif; background:var(--paper); color:var(--ink); overflow:hidden; }
+  h1,h2,h3,.brand{ font-family:'Space Grotesk', sans-serif; }
+  .num{ font-family:'IBM Plex Mono', monospace; }
+
+  .app{ display:flex; height:100vh; }
+
+  /* Sidebar */
+  .sidebar{ width:76px; background:var(--ink); display:flex; flex-direction:column; align-items:center; padding:20px 0; flex-shrink:0; }
+  .add-btn{ width:44px; height:44px; border-radius:10px; background:var(--amber); border:none; color:var(--ink); font-size:26px; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:center; margin-bottom:36px; box-shadow:0 2px 0 var(--amber-dark); }
+  .add-btn:hover{ background:#E4A050; }
+  .nav-icon-wrap{ display:flex; flex-direction:column; align-items:center; margin-top:14px; }
+  .nav-icon{ width:48px; height:48px; border-radius:10px; display:flex; align-items:center; justify-content:center; color:#8B909A; cursor:pointer; font-size:20px; border:none; background:none; position:relative; }
+  .nav-icon:hover{ color:#EDEAE2; }
+  .nav-icon.active{ color:var(--paper); background:#2B2F36; }
+  .nav-icon.active::before{ content:''; position:absolute; left:-20px; top:50%; transform:translateY(-50%); width:4px; height:22px; background:var(--amber); border-radius:0 3px 3px 0; }
+  .nav-label{ font-size:9px; margin-top:3px; font-weight:500; color:#8B909A; }
+  .nav-label.active{ color:#EDEAE2; }
+
+  /* Main */
+  .main{ flex:1; overflow-y:auto; padding:36px 44px 60px; }
+  .section-title{ font-size:24px; font-weight:600; margin:0; }
+  .section-sub{ color:var(--ink-soft); font-size:14px; margin:4px 0 28px; }
+  .panel{ display:none; }
+  .panel.active{ display:block; animation:fade .2s ease; }
+  @keyframes fade{ from{opacity:0;} to{opacity:1;} }
+
+  /* Shared elements */
+  table{ width:100%; border-collapse:collapse; background:var(--paper-raised); border:1px solid var(--line); border-radius:4px; overflow:hidden; }
+  th{ text-align:left; font-size:11.5px; color:var(--ink-soft); font-weight:600; padding:10px 14px; border-bottom:1px solid var(--line); background:#EEE9DD; }
+  td{ padding:10px 14px; font-size:13px; border-bottom:1px solid var(--line); vertical-align:middle; }
+  tr:last-child td{ border-bottom:none; }
+  td.price{ font-family:'IBM Plex Mono'; font-weight:500; }
+  .warn-badge{ display:inline-block; background:var(--rust-bg); color:var(--rust); font-size:11px; font-weight:600; padding:3px 8px; border-radius:3px; }
+  .tag-recent{ font-size:10.5px; background:#DCE7EC; color:var(--cable); padding:2px 7px; border-radius:3px; margin-left:8px; }
+  button.btn-primary{ background:var(--green); color:#fff; border:none; padding:11px 22px; border-radius:4px; font-size:13.5px; font-weight:500; cursor:pointer; font-family:'IBM Plex Sans'; }
+  button.btn-primary:disabled{ opacity:.5; cursor:default; }
+  button.btn-dark{ background:var(--ink); color:var(--paper); border:none; padding:10px 18px; border-radius:4px; font-size:13.5px; font-weight:500; cursor:pointer; font-family:'IBM Plex Sans'; }
+  input[type=text], select, input[type=password]{ padding:9px 12px; border:1px solid var(--line); border-radius:4px; font-size:13.5px; font-family:'IBM Plex Sans'; background:var(--paper-raised); }
+  input:focus, select:focus{ outline:none; border-color:var(--cable); }
+  .estado-msg{ color:var(--ink-soft); font-size:13.5px; margin-bottom:14px; white-space:pre-wrap; }
+  .error{ color:var(--rust); font-weight:600; }
+
+  /* ---- Home ---- */
+  .home-grid{ display:grid; grid-template-columns:1.4fr 1fr; gap:20px; margin-top:10px; }
+  .tile{ background:var(--paper-raised); border:1px solid var(--line); border-radius:4px; padding:26px 28px; cursor:pointer; transition:border-color .15s ease, transform .15s ease; }
+  .tile:hover{ border-color:var(--cable-light); transform:translateY(-2px); }
+  .tile-compras{ grid-row:span 2; display:flex; flex-direction:column; justify-content:space-between; }
+  .tile-eyebrow{ font-size:12px; color:var(--cable); font-weight:600; margin-bottom:10px; }
+  .tile h3{ font-size:20px; margin:0 0 8px; }
+  .tile p{ font-size:13.5px; color:var(--ink-soft); line-height:1.5; margin:0; }
+  .tile-big-stat{ font-family:'IBM Plex Mono'; font-size:34px; font-weight:600; margin-top:18px; }
+  .tile-big-stat span{ font-size:14px; color:var(--ink-soft); font-family:'IBM Plex Sans'; font-weight:400; }
+  .tile-proveedores{ border-left:3px solid var(--rust); }
+  .lock-tag{ display:inline-flex; align-items:center; gap:5px; font-size:11.5px; color:var(--rust); font-weight:600; }
+
+  /* ---- Albaranes ---- */
+  #alb-preview{ max-width:200px; margin-top:10px; border:1px solid var(--line); border-radius:4px; display:none; }
+  .campo-cabecera{ margin-bottom:10px; }
+  .campo-cabecera label{ display:inline-block; width:120px; font-size:13px; color:var(--ink-soft); }
+  select.select-material{ font-size:12.5px; padding:4px 6px; }
+
+  /* ---- Compras ---- */
+  .search-row{ display:flex; gap:10px; margin-bottom:26px; }
+  .search-box{ flex:1; max-width:480px; }
+  .compare-row{ display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:30px; }
+  .compare-card{ background:var(--paper-raised); border:1px solid var(--line); border-radius:4px; padding:20px 22px; }
+  .compare-card.recent{ border-top:3px solid var(--cable); }
+  .compare-card.cheap{ border-top:3px solid var(--amber); }
+  .compare-eyebrow{ font-size:11.5px; font-weight:600; color:var(--ink-soft); margin-bottom:12px; }
+  .compare-provider{ font-size:17px; font-weight:600; margin-bottom:4px; }
+  .compare-price{ font-family:'IBM Plex Mono'; font-size:24px; font-weight:600; }
+  .compare-meta{ font-size:12.5px; color:var(--ink-soft); margin-top:6px; }
+  .chart-wrap{ background:var(--paper-raised); border:1px solid var(--line); border-radius:4px; padding:24px 24px 10px; margin-bottom:20px; }
+  .chart-bars{ display:flex; align-items:flex-end; gap:14px; height:120px; border-bottom:1px solid var(--line); overflow-x:auto; }
+  .bar-col{ display:flex; flex-direction:column; align-items:center; flex:1; min-width:34px; height:100%; justify-content:flex-end; }
+  .bar{ width:100%; max-width:34px; border-radius:2px 2px 0 0; background:var(--cable-light); }
+  .bar-col.mas-reciente .bar{ background:var(--amber); }
+  .bar-label{ font-size:10px; color:var(--ink-soft); margin-top:6px; font-family:'IBM Plex Mono'; text-align:center; }
+
+  /* ---- Presupuestos ---- */
+  .upload-zone{ border:1.5px dashed var(--line); border-radius:4px; padding:32px; text-align:center; background:var(--paper-raised); margin-bottom:26px; color:var(--ink-soft); }
+  .upload-zone strong{ color:var(--ink); display:block; margin-bottom:6px; font-size:15px; }
+  tr.sin-datos td{ background:var(--rust-bg); }
+  .precio-input{ width:75px; padding:4px 6px; border:1px solid var(--rust); border-radius:3px; font-family:'IBM Plex Mono'; font-size:12.5px; }
+  select.select-parecido{ font-size:12px; padding:3px 5px; margin-top:4px; }
+  .total-row{ display:flex; justify-content:flex-end; align-items:baseline; gap:10px; padding:16px 4px; }
+  .total-row .label{ font-size:14px; color:var(--ink-soft); }
+  .total-row .amount{ font-family:'IBM Plex Mono'; font-size:26px; font-weight:600; }
+
+  /* ---- Proveedores ---- */
+  .lock-screen{ max-width:300px; margin:60px auto 0; text-align:center; }
+  .lock-screen .lock-icon{ font-size:32px; margin-bottom:12px; }
+  .lock-screen input{ width:100%; text-align:center; letter-spacing:.15em; margin:14px 0; font-family:'IBM Plex Mono'; }
+  .lock-screen button{ width:100%; }
+  .lock-error{ color:var(--rust); font-size:12.5px; margin-top:8px; display:none; }
+  .prov-total{ background:var(--ink); color:var(--paper); border-radius:4px; padding:24px 28px; margin-bottom:24px; display:flex; justify-content:space-between; align-items:center; }
+  .prov-total .amount{ font-family:'IBM Plex Mono'; font-size:32px; font-weight:600; color:#F0D9A8; }
+  .prov-total .label{ font-size:12.5px; color:#B7BCC4; }
+  .year-select{ background:none; border:1px solid #454B54; color:var(--paper); padding:6px 12px; border-radius:4px; font-family:'IBM Plex Mono'; font-size:13px; }
+  .prov-bars{ background:var(--paper-raised); border:1px solid var(--line); border-radius:4px; padding:22px; margin-bottom:24px; }
+  .prov-bar-row{ display:flex; align-items:center; gap:12px; margin-bottom:13px; }
+  .prov-bar-row:last-child{ margin-bottom:0; }
+  .prov-bar-name{ width:130px; font-size:13px; flex-shrink:0; }
+  .prov-bar-track{ flex:1; background:#EDE8DC; border-radius:3px; height:18px; overflow:hidden; }
+  .prov-bar-fill{ height:100%; background:var(--green); border-radius:3px; }
+  .prov-bar-amount{ width:90px; text-align:right; font-family:'IBM Plex Mono'; font-size:13px; flex-shrink:0; }
+  tr.fila-proveedor{ cursor:pointer; }
+  tr.fila-proveedor:hover{ background:#F7F4EC; }
+  .meses-detalle{ display:none; background:#F7F4EC; }
+  .meses-grid{ display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; font-size:12px; }
+</style>
+</head>
+<body>
+
+<div class="lock-screen" id="configGate" style="display:none; margin-top:80px;">
+  <div class="lock-icon">🔑</div>
+  <div style="font-size:14px; color:var(--ink-soft); margin-bottom:16px;">Configuración inicial (solo una vez en este navegador)</div>
+  <div style="text-align:left; margin-bottom:10px;">
+    <label style="font-size:12px; color:var(--ink-soft);">Supabase Project URL</label><br>
+    <input type="text" id="cfgSupabaseUrl" style="width:100%;" placeholder="https://xxxx.supabase.co">
+  </div>
+  <div style="text-align:left; margin-bottom:10px;">
+    <label style="font-size:12px; color:var(--ink-soft);">Supabase anon key</label><br>
+    <input type="text" id="cfgSupabaseKey" style="width:100%;" placeholder="eyJ...">
+  </div>
+  <div style="text-align:left; margin-bottom:16px;">
+    <label style="font-size:12px; color:var(--ink-soft);">Groq API key</label><br>
+    <input type="text" id="cfgGroqKey" style="width:100%;" placeholder="gsk_...">
+  </div>
+  <button class="btn-dark" style="width:100%;" onclick="guardarConfiguracionInicial()">Guardar y entrar</button>
+  <div class="lock-error" id="cfgError">Rellena los 3 campos.</div>
+</div>
+
+<div class="app" id="appPrincipal" style="display:none;">
+  <div class="sidebar">
+    <button class="add-btn" title="Subir albarán" onclick="showPanel('albaranes')">+</button>
+    <div class="nav-icon-wrap"><button class="nav-icon" data-panel="home" onclick="showPanel('home')">⌂</button></div>
+    <div class="nav-icon-wrap"><button class="nav-icon active" data-panel="compras" onclick="showPanel('compras')">🛒</button><span class="nav-label active" data-label="compras">Compras</span></div>
+    <div class="nav-icon-wrap"><button class="nav-icon" data-panel="presupuestos" onclick="showPanel('presupuestos')">📋</button><span class="nav-label" data-label="presupuestos">Presup.</span></div>
+    <div class="nav-icon-wrap"><button class="nav-icon" data-panel="proveedores" onclick="showPanel('proveedores')">🔒</button><span class="nav-label" data-label="proveedores">Proveed.</span></div>
+  </div>
+
+  <div class="main">
+
+    <!-- HOME -->
+    <div class="panel" id="panel-home">
+      <h1 class="section-title">Delegación · Compras</h1>
+      <div class="section-sub">Resumen general</div>
+      <div class="home-grid">
+        <div class="tile tile-compras" onclick="showPanel('compras')">
+          <div>
+            <div class="tile-eyebrow">Compras</div>
+            <h3>¿Dónde compro este material?</h3>
+            <p>Consulta el precio más reciente y el más barato histórico de cualquier material.</p>
+          </div>
+          <div class="tile-big-stat"><span id="home-num-materiales">—</span> <span>materiales en base de datos</span></div>
+        </div>
+        <div class="tile" onclick="showPanel('presupuestos')">
+          <div class="tile-eyebrow" style="color:var(--amber-dark);">Presupuestos</div>
+          <h3>Valora una licitación</h3>
+          <p>Sube tu lista de materiales y descarga el Excel valorado.</p>
+        </div>
+        <div class="tile tile-proveedores" onclick="showPanel('proveedores')">
+          <span class="lock-tag">🔒 Acceso restringido</span>
+          <h3 style="margin-top:10px;">Proveedores</h3>
+          <p>Gasto mensual y anual por proveedor.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ALBARANES -->
+    <div class="panel" id="panel-albaranes">
+      <h1 class="section-title">Subir albarán</h1>
+      <div class="section-sub">Sube un archivo y confirma proveedor y materiales antes de guardar</div>
+
+      <input type="file" id="alb-archivo" accept="image/*,application/pdf">
+      <br>
+      <img id="alb-preview">
+      <div class="estado-msg" id="alb-estado" style="margin-top:14px;">Esperando un archivo...</div>
+
+      <div id="alb-zonaRevision" style="display:none; margin-top:20px;">
+        <h3 style="font-size:15px;">Datos de cabecera</h3>
+        <div class="campo-cabecera"><label>Proveedor:</label>
+          <input type="text" id="alb-inputProveedor" list="alb-listaProveedores" placeholder="Escribe o elige...">
+          <datalist id="alb-listaProveedores"></datalist>
+        </div>
+        <div class="campo-cabecera"><label>Fecha:</label> <input type="text" id="alb-inputFecha"></div>
+        <div class="campo-cabecera"><label>Nº Albarán:</label> <input type="text" id="alb-inputNumero"></div>
+        <div class="campo-cabecera"><label>Importe total:</label> <input type="text" id="alb-inputImporte"></div>
+
+        <h3 style="font-size:15px;">Líneas de material</h3>
+        <table>
+          <thead><tr><th>Descripción</th><th>Cant.</th><th>Precio</th><th>Vincular a material</th></tr></thead>
+          <tbody id="alb-cuerpoLineas"></tbody>
+        </table>
+
+        <div style="margin-top:16px;"><button class="btn-primary" id="alb-btnGuardar" onclick="albGuardarTodo()">Guardar albarán</button></div>
+      </div>
+    </div>
+
+    <!-- COMPRAS -->
+    <div class="panel active" id="panel-compras">
+      <h1 class="section-title">Compras</h1>
+      <div class="section-sub">Busca un material y compara precios entre proveedores</div>
+
+      <div class="search-row">
+        <input class="search-box" type="text" id="cmp-buscador" list="cmp-listaMateriales" placeholder="Buscar material…">
+        <datalist id="cmp-listaMateriales"></datalist>
+        <button class="btn-dark" onclick="cmpBuscarDesdeInput()">Buscar</button>
+      </div>
+      <div class="estado-msg" id="cmp-estado">Escribe un material y selecciónalo de la lista.</div>
+
+      <div id="cmp-resultados" style="display:none;">
+        <div class="compare-row">
+          <div class="compare-card recent">
+            <div class="compare-eyebrow">🕐 Más reciente</div>
+            <div class="compare-provider" id="cmp-provReciente">—</div>
+            <div class="compare-price" id="cmp-precioReciente">—</div>
+            <div class="compare-meta" id="cmp-metaReciente">—</div>
+            <div id="cmp-avisoDesactualizado" style="display:none;" class="warn-badge">⚠ Precio con más de 6 meses</div>
+            <div style="margin-top:10px;"><button class="btn-dark" id="cmp-descargarReciente" style="font-size:12px; padding:7px 12px;">⬇ Descargar albarán</button></div>
+          </div>
+          <div class="compare-card cheap">
+            <div class="compare-eyebrow">📉 Más barato histórico</div>
+            <div class="compare-provider" id="cmp-provBarato">—</div>
+            <div class="compare-price" id="cmp-precioBarato">—</div>
+            <div class="compare-meta" id="cmp-metaBarato">—</div>
+            <div style="margin-top:10px;"><button class="btn-dark" id="cmp-descargarBarato" style="font-size:12px; padding:7px 12px;">⬇ Descargar albarán</button></div>
+          </div>
+        </div>
+        <h3 style="font-size:15px;">Evolución de precio</h3>
+        <div class="chart-wrap"><div class="chart-bars" id="cmp-chartBars"></div></div>
+        <table>
+          <thead><tr><th>Proveedor</th><th>Precio</th><th>Fecha</th><th>Nº Albarán</th><th></th></tr></thead>
+          <tbody id="cmp-tablaHistorial"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- PRESUPUESTOS -->
+    <div class="panel" id="panel-presupuestos">
+      <h1 class="section-title">Presupuestos</h1>
+      <div class="section-sub">Sube una lista de materiales y genera un presupuesto valorado</div>
+
+      <div class="upload-zone">
+        <strong>Sube tu lista de materiales</strong>
+        Excel, PDF, Word o imagen
+        <br>
+        <input type="file" id="pre-archivo" accept=".xlsx,.xls,.pdf,.docx,image/*">
+      </div>
+
+      <div class="estado-msg" id="pre-estado"></div>
+
+      <div id="pre-zonaTabla" style="display:none;">
+        <table>
+          <thead><tr><th>Material</th><th>Cant.</th><th>Precio</th><th>Total</th></tr></thead>
+          <tbody id="pre-cuerpoTabla"></tbody>
+        </table>
+        <div class="total-row"><span class="label">Total estimado</span><span class="amount" id="pre-totalEstimado">0,00 €</span></div>
+        <div style="text-align:right;"><button class="btn-primary" onclick="preDescargarExcel()">⬇ Descargar Excel</button></div>
+      </div>
+    </div>
+
+    <!-- PROVEEDORES -->
+    <div class="panel" id="panel-proveedores">
+      <h1 class="section-title">Proveedores</h1>
+      <div class="section-sub">Acceso restringido — solo importes</div>
+
+      <div class="lock-screen" id="prov-lockScreen">
+        <div class="lock-icon">🔒</div>
+        <div style="font-size:14px; color:var(--ink-soft);">Introduce la contraseña</div>
+        <input type="password" id="prov-passInput" placeholder="••••">
+        <button class="btn-dark" onclick="provComprobarPassword()">Entrar</button>
+        <div class="lock-error" id="prov-lockError">Contraseña incorrecta.</div>
+      </div>
+
+      <div id="prov-contenido" style="display:none;">
+        <div class="estado-msg" id="prov-estado">Cargando datos...</div>
+        <div id="prov-zonaDatos" style="display:none;">
+          <div class="prov-total">
+            <div><div class="label">Gasto total · <span id="prov-anioTotal"></span></div><div class="amount" id="prov-totalAnio">0 €</div></div>
+            <select class="year-select" id="prov-selectorAnio" onchange="provRenderizarAnio()"></select>
+          </div>
+          <div class="prov-bars" id="prov-zonaBarras"></div>
+          <table>
+            <thead><tr><th>Proveedor</th><th>Ene-Jun</th><th>Jul-Dic</th><th>Total año</th></tr></thead>
+            <tbody id="prov-tablaProveedores"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script>
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+  // ================= CONFIGURACIÓN GLOBAL =================
+  // Las claves NO están escritas aquí: se guardan en el propio navegador (localStorage)
+  // la primera vez que abres la app, así el código que subes a GitHub queda limpio
+  // y no expone tus claves en el repositorio.
+  const SUPABASE_URL = localStorage.getItem('cfg_supabase_url');
+  const SUPABASE_KEY = localStorage.getItem('cfg_supabase_key');
+  const GROQ_API_KEY = localStorage.getItem('cfg_groq_key');
+
+  if(!SUPABASE_URL || !SUPABASE_KEY || !GROQ_API_KEY){
+    document.getElementById('configGate').style.display = 'block';
+    document.getElementById('appPrincipal').style.display = 'none';
+  } else {
+    document.getElementById('configGate').style.display = 'none';
+    document.getElementById('appPrincipal').style.display = 'flex';
+    iniciarApp();
+  }
+
+  function guardarConfiguracionInicial(){
+    const url = document.getElementById('cfgSupabaseUrl').value.trim();
+    const key = document.getElementById('cfgSupabaseKey').value.trim();
+    const groq = document.getElementById('cfgGroqKey').value.trim();
+    if(!url || !key || !groq){ document.getElementById('cfgError').style.display = 'block'; return; }
+    localStorage.setItem('cfg_supabase_url', url);
+    localStorage.setItem('cfg_supabase_key', key);
+    localStorage.setItem('cfg_groq_key', groq);
+    location.reload();
+  }
+
+  function iniciarApp(){
+  const MODEL = "qwen/qwen3.6-27b";
+  const { createClient } = supabase;
+  const client = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  // ================= NAVEGACIÓN =================
+  function showPanel(nombre){
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.getElementById('panel-' + nombre).classList.add('active');
+    document.querySelectorAll('.nav-icon').forEach(i => i.classList.toggle('active', i.dataset.panel === nombre));
+    document.querySelectorAll('.nav-label').forEach(l => l.classList.toggle('active', l.dataset.label === nombre));
+
+    if(nombre === 'compras' && cmpMaterialesCache.length === 0) cmpCargarMateriales();
+    if(nombre === 'presupuestos' && preMaterialesCache.length === 0) preCargarMateriales();
+    if(nombre === 'albaranes' && albProveedoresCache.length === 0) { albCargarProveedores(); albCargarMateriales(); }
+  }
+
+  // ================= UTILIDADES COMPARTIDAS =================
+  function normalizarPalabras(s){
+    return (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
+  }
+  function esIgual(a, b){ return normalizarPalabras(a).join(' ') === normalizarPalabras(b).join(' '); }
+  function similitud(a, b){
+    const wa = new Set(normalizarPalabras(a)), wb = new Set(normalizarPalabras(b));
+    if(wa.size === 0 || wb.size === 0) return 0;
+    const inter = [...wa].filter(w => wb.has(w)).length;
+    return inter / new Set([...wa, ...wb]).size;
+  }
+  function formatearFecha(fechaStr){ if(!fechaStr) return '—'; return new Date(fechaStr).toLocaleDateString('es-ES'); }
+  function formatearEuros(valor){ return valor.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €'; }
+  const esperar = (ms) => new Promise(res => setTimeout(res, ms));
+
+  // Construye las opciones de un <datalist> de forma segura, evitando que
+  // comillas u otros caracteres especiales en los nombres (p.ej. medidas en pulgadas
+  // como 18") rompan el valor real de la opción.
+  function poblarDatalist(id, valores){
+    const datalist = document.getElementById(id);
+    datalist.innerHTML = '';
+    valores.forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = v;
+      datalist.appendChild(opt);
+    });
+  }
+
+  async function llamarGroq(messages, maxTokens){
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${GROQ_API_KEY}` },
+      body: JSON.stringify({ model: MODEL, messages, temperature: 0.1, max_completion_tokens: maxTokens, reasoning_effort: "none" })
+    });
+    const data = await response.json();
+    if(!response.ok) throw new Error(JSON.stringify(data, null, 2));
+    return data.choices[0].message.content;
+  }
+  async function llamarGroqConReintento(messages, maxTokens, mensajeEspera, elementoEstado){
+    const maxIntentos = 3;
+    for(let intento = 1; intento <= maxIntentos; intento++){
+      try { return await llamarGroq(messages, maxTokens); }
+      catch(err){
+        const esLimite = err.message.includes('rate_limit_exceeded');
+        if(esLimite && intento < maxIntentos){
+          if(elementoEstado) elementoEstado.textContent = mensajeEspera || `Límite de la IA alcanzado, esperando (intento ${intento}/${maxIntentos})...`;
+          await esperar(65000);
+        } else throw err;
+      }
+    }
+  }
+  async function obtenerPrecioMasReciente(materialId, precioManual){
+    const { data } = await client.from('lineas_albaran').select('precio_unitario, albaranes(fecha)').eq('material_id', materialId);
+    const conFecha = (data || []).filter(f => f.albaranes && f.albaranes.fecha);
+    if(conFecha.length > 0){
+      conFecha.sort((a, b) => new Date(b.albaranes.fecha) - new Date(a.albaranes.fecha));
+      return parseFloat(conFecha[0].precio_unitario);
+    }
+    if(precioManual !== null && precioManual !== undefined) return parseFloat(precioManual);
+    return null;
+  }
+
+  // Cargar contador para la pantalla Home
+  client.from('materiales').select('id', { count: 'exact', head: true }).then(({ count }) => {
+    document.getElementById('home-num-materiales').textContent = count ?? '—';
+  });
+
+  // ================================================================
+  // ============================ ALBARANES ==========================
+  // ================================================================
+  let albArchivoActual = null, albBase64Actual = null, albTextoExtraidoPDF = null;
+  let albDatosExtraidos = null, albProveedoresCache = [], albMaterialesCache = [];
+
+  document.getElementById('alb-archivo').addEventListener('change', async () => {
+    const file = document.getElementById('alb-archivo').files[0];
+    if(!file) return;
+    albArchivoActual = file; albTextoExtraidoPDF = null; albBase64Actual = null;
+    document.getElementById('alb-zonaRevision').style.display = 'none';
+    const estado = document.getElementById('alb-estado');
+    const preview = document.getElementById('alb-preview');
+
+    if(file.type === 'application/pdf'){
+      estado.textContent = "Leyendo el PDF...";
+      const resultado = await albExtraerTextoYPreviewPdf(file);
+      preview.src = resultado.previewDataUrl; preview.style.display = 'block';
+      if(resultado.texto.trim().length < 20){
+        albTextoExtraidoPDF = null; albBase64Actual = resultado.previewDataUrl;
+        estado.textContent = "PDF parece escaneado, se usará IA de visión...";
+      } else albTextoExtraidoPDF = resultado.texto;
+    } else {
+      const reader = new FileReader();
+      await new Promise(res => { reader.onload = (e) => { albBase64Actual = e.target.result; res(); }; reader.readAsDataURL(file); });
+      preview.src = albBase64Actual; preview.style.display = 'block';
+    }
+
+    await Promise.all([albCargarProveedores(), albCargarMateriales()]);
+    await albExtraerDatos();
+  });
+
+  async function albCargarProveedores(){
+    const { data } = await client.from('proveedores').select('id, nombre').order('nombre');
+    albProveedoresCache = data || [];
+    poblarDatalist('alb-listaProveedores', albProveedoresCache.map(p => p.nombre));
+  }
+  async function albCargarMateriales(){
+    const { data } = await client.from('materiales').select('id, nombre_canonico');
+    albMaterialesCache = data || [];
+  }
+
+  const ALB_PROMPT_OCR = `Transcribe TODO el texto que veas en esta imagen de un documento de compra, tal cual aparece, manteniendo el orden de la tabla de artículos (una línea por fila, columnas separadas por " | "). No omitas filas. Solo transcribe.`;
+  const ALB_PROMPT_ESTRUCTURA = (texto) => `A partir de este texto de un documento de compra español, extrae los datos y responde SOLO con este JSON, sin explicaciones:
+{"fecha":"YYYY-MM-DD","numero_albaran":"","importe_total":0.00,"lineas":[{"descripcion":"","cantidad":0,"precio_unitario":0.00,"precio_total":0.00}]}
+No incluyas "proveedor". fecha = "Fecha Pedido/Albarán/Factura". numero_albaran = "Nº Pedido/Albarán/Factura". importe_total = el total final (no la Base Imponible). lineas = cada fila de la tabla. Usa null solo si no aparece.
+Texto:
+"""${texto}"""`;
+
+  async function albExtraerDatos(){
+    const estado = document.getElementById('alb-estado');
+    try {
+      let texto;
+      if(albTextoExtraidoPDF){ estado.textContent = "Organizando los datos del PDF..."; texto = albTextoExtraidoPDF; }
+      else {
+        estado.textContent = "Leyendo la imagen con IA...";
+        texto = await llamarGroq([{ role:"user", content:[{type:"text", text:ALB_PROMPT_OCR},{type:"image_url", image_url:{url:albBase64Actual}}] }], 700);
+        estado.textContent = "Organizando los datos...";
+      }
+      const respuesta = await llamarGroq([{ role:"user", content: ALB_PROMPT_ESTRUCTURA(texto) }], 500);
+      const inicio = respuesta.indexOf('{'), fin = respuesta.lastIndexOf('}');
+      albDatosExtraidos = JSON.parse(respuesta.slice(inicio, fin + 1));
+      albMostrarRevision();
+      estado.textContent = "Datos extraídos. Revisa y confirma antes de guardar.";
+    } catch(err){ estado.innerHTML = `<span class="error">Error: ${err.message}</span>`; }
+  }
+
+  async function albExtraerTextoYPreviewPdf(file){
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    let textoCompleto = '', previewDataUrl = null;
+    for(let n = 1; n <= pdf.numPages; n++){
+      const page = await pdf.getPage(n);
+      const content = await page.getTextContent();
+      const items = content.items.map(it => ({ str: it.str, x: it.transform[4], y: it.transform[5] })).filter(it => it.str.trim());
+      items.sort((a, b) => b.y - a.y || a.x - b.x);
+      const lineas = []; let actual = []; let yAct = null;
+      for(const it of items){
+        if(yAct === null || Math.abs(it.y - yAct) > 3){ if(actual.length) lineas.push(actual); actual = [it]; yAct = it.y; }
+        else actual.push(it);
+      }
+      if(actual.length) lineas.push(actual);
+      lineas.forEach(l => { l.sort((a,b) => a.x - b.x); textoCompleto += l.map(i => i.str).join(' | ') + '\n'; });
+      if(n === 1){
+        const viewport = page.getViewport({ scale: 1.3 });
+        const canvas = document.createElement('canvas');
+        canvas.width = viewport.width; canvas.height = viewport.height;
+        await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+        previewDataUrl = canvas.toDataURL('image/png');
+      }
+    }
+    return { texto: textoCompleto, previewDataUrl };
+  }
+
+  function albMostrarRevision(){
+    document.getElementById('alb-inputProveedor').value = '';
+    document.getElementById('alb-inputFecha').value = albDatosExtraidos.fecha || '';
+    document.getElementById('alb-inputNumero').value = albDatosExtraidos.numero_albaran || '';
+    document.getElementById('alb-inputImporte').value = albDatosExtraidos.importe_total ?? '';
+
+    const cuerpo = document.getElementById('alb-cuerpoLineas');
+    cuerpo.innerHTML = '';
+    (albDatosExtraidos.lineas || []).forEach((linea, idx) => {
+      const candidatos = albMaterialesCache.map(m => ({ ...m, score: similitud(linea.descripcion, m.nombre_canonico) }))
+        .filter(m => m.score > 0.35).sort((a, b) => b.score - a.score).slice(0, 3);
+      const hayExacto = albMaterialesCache.find(m => esIgual(m.nombre_canonico, linea.descripcion));
+
+      const tr = document.createElement('tr');
+      tr.dataset.idx = idx;
+      let selectHtml;
+      if(hayExacto){
+        selectHtml = `<span class="tag-recent">✓ vinculado: ${hayExacto.nombre_canonico}</span><input type="hidden" class="select-material" data-tipo="existente" data-id="${hayExacto.id}">`;
+      } else {
+        const opciones = candidatos.map(c => `<option value="existente:${c.id}">Usar: ${c.nombre_canonico} (${Math.round(c.score*100)}%)</option>`).join('');
+        selectHtml = `<select class="select-material">${opciones}<option value="nuevo" ${candidatos.length === 0 ? 'selected' : ''}>➕ Crear nuevo</option></select>`;
+      }
+      tr.innerHTML = `<td>${linea.descripcion || ''}</td><td>${linea.cantidad ?? ''}</td><td>${linea.precio_unitario ?? ''}</td><td>${selectHtml}</td>`;
+      cuerpo.appendChild(tr);
+    });
+    document.getElementById('alb-zonaRevision').style.display = 'block';
+  }
+
+  async function albGuardarTodo(){
+    const btn = document.getElementById('alb-btnGuardar');
+    const estado = document.getElementById('alb-estado');
+    btn.disabled = true; estado.textContent = "Guardando...";
+    try {
+      const nombreProveedor = document.getElementById('alb-inputProveedor').value.trim();
+      if(!nombreProveedor) throw new Error("Escribe o selecciona un proveedor.");
+
+      let proveedor = albProveedoresCache.find(p => esIgual(p.nombre, nombreProveedor));
+      let proveedorId;
+      if(proveedor) proveedorId = proveedor.id;
+      else {
+        const { data, error } = await client.from('proveedores').insert([{ nombre: nombreProveedor }]).select().single();
+        if(error) throw error;
+        proveedorId = data.id;
+      }
+
+      const rutaArchivo = `${Date.now()}_${albArchivoActual.name}`;
+      const { error: errorSubida } = await client.storage.from('albaranes').upload(rutaArchivo, albArchivoActual);
+      if(errorSubida) throw errorSubida;
+
+      const { data: albaran, error: errorAlbaran } = await client.from('albaranes').insert([{
+        proveedor_id: proveedorId,
+        fecha: document.getElementById('alb-inputFecha').value || null,
+        numero_albaran: document.getElementById('alb-inputNumero').value || null,
+        importe_total: parseFloat(document.getElementById('alb-inputImporte').value) || null,
+        archivo_url: rutaArchivo
+      }]).select().single();
+      if(errorAlbaran) throw errorAlbaran;
+
+      const filas = [...document.getElementById('alb-cuerpoLineas').querySelectorAll('tr')];
+      for(const fila of filas){
+        const idx = fila.dataset.idx;
+        const linea = albDatosExtraidos.lineas[idx];
+        const selectorMaterial = fila.querySelector('.select-material');
+        let materialId;
+        if(selectorMaterial.tagName === 'INPUT') materialId = selectorMaterial.dataset.id;
+        else {
+          const valor = selectorMaterial.value;
+          if(valor === 'nuevo'){
+            const { data, error } = await client.from('materiales').insert([{ nombre_canonico: linea.descripcion }]).select().single();
+            if(error) throw error;
+            materialId = data.id; albMaterialesCache.push(data);
+          } else materialId = valor.split(':')[1];
+        }
+        const { error: errorLinea } = await client.from('lineas_albaran').insert([{
+          albaran_id: albaran.id, material_id: materialId, descripcion_original: linea.descripcion,
+          cantidad: linea.cantidad, precio_unitario: linea.precio_unitario, precio_total: linea.precio_total
+        }]);
+        if(errorLinea) throw errorLinea;
+      }
+
+      estado.innerHTML = `<span style="color:var(--green); font-weight:600;">✓ Albarán guardado correctamente.</span>`;
+      document.getElementById('alb-zonaRevision').style.display = 'none';
+      document.getElementById('alb-archivo').value = '';
+      cmpMaterialesCache = []; preMaterialesCache = []; // refrescar cachés de otras pantallas
+
+    } catch(err){ estado.innerHTML = `<span class="error">Error al guardar: ${err.message || JSON.stringify(err)}</span>`; }
+    btn.disabled = false;
+  }
+
+  // ================================================================
+  // ============================ COMPRAS ============================
+  // ================================================================
+  let cmpMaterialesCache = [];
+
+  async function cmpCargarMateriales(){
+    const { data } = await client.from('materiales').select('id, nombre_canonico').order('nombre_canonico');
+    cmpMaterialesCache = data || [];
+    poblarDatalist('cmp-listaMateriales', cmpMaterialesCache.map(m => m.nombre_canonico));
+  }
+
+  let cmpUltimaBusqueda = '';
+  function cmpIntentarBuscar(){
+    const valor = document.getElementById('cmp-buscador').value.trim();
+    const material = cmpMaterialesCache.find(m => m.nombre_canonico.toLowerCase() === valor.toLowerCase());
+    if(material && valor !== cmpUltimaBusqueda){ cmpUltimaBusqueda = valor; cmpBuscarPrecios(material); }
+    return material;
+  }
+  function cmpBuscarDesdeInput(){
+    const encontrado = cmpIntentarBuscar();
+    if(!encontrado){
+      document.getElementById('cmp-estado').textContent = "No encuentro ese material exacto. Selecciónalo de la lista de sugerencias.";
+      document.getElementById('cmp-resultados').style.display = 'none';
+    }
+  }
+  document.getElementById('cmp-buscador').addEventListener('input', cmpIntentarBuscar);
+  document.getElementById('cmp-buscador').addEventListener('change', cmpIntentarBuscar);
+  document.getElementById('cmp-buscador').addEventListener('keydown', (e) => { if(e.key === 'Enter') cmpBuscarDesdeInput(); });
+
+  async function cmpBuscarPrecios(material){
+    const estado = document.getElementById('cmp-estado');
+    const resultados = document.getElementById('cmp-resultados');
+    estado.textContent = "Buscando precios..."; resultados.style.display = 'none';
+
+    const { data, error } = await client.from('lineas_albaran')
+      .select('cantidad, precio_unitario, precio_total, albaranes ( fecha, numero_albaran, archivo_url, proveedores ( nombre ) )')
+      .eq('material_id', material.id);
+    if(error){ estado.innerHTML = `<span class="error">Error: ${error.message}</span>`; return; }
+    if(!data || data.length === 0){ estado.textContent = "No hay compras registradas de este material todavía."; return; }
+
+    const filas = data.filter(f => f.albaranes).map(f => ({
+      proveedor: f.albaranes.proveedores ? f.albaranes.proveedores.nombre : '—',
+      fecha: f.albaranes.fecha, numero: f.albaranes.numero_albaran,
+      archivoUrl: f.albaranes.archivo_url, precio: parseFloat(f.precio_unitario)
+    })).sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+
+    const masReciente = filas[0];
+    const masBarato = [...filas].sort((a, b) => a.precio - b.precio)[0];
+
+    document.getElementById('cmp-provReciente').textContent = masReciente.proveedor;
+    document.getElementById('cmp-precioReciente').textContent = masReciente.precio.toFixed(2) + ' €';
+    document.getElementById('cmp-metaReciente').textContent = `Albarán ${masReciente.numero || ''} · ${formatearFecha(masReciente.fecha)}`;
+    document.getElementById('cmp-descargarReciente').onclick = () => cmpDescargarAlbaran(masReciente.archivoUrl);
+    document.getElementById('cmp-provBarato').textContent = masBarato.proveedor;
+    document.getElementById('cmp-precioBarato').textContent = masBarato.precio.toFixed(2) + ' €';
+    document.getElementById('cmp-metaBarato').textContent = `Albarán ${masBarato.numero || ''} · ${formatearFecha(masBarato.fecha)}`;
+    document.getElementById('cmp-descargarBarato').onclick = () => cmpDescargarAlbaran(masBarato.archivoUrl);
+
+    const meses = (new Date().getFullYear() - new Date(masReciente.fecha).getFullYear()) * 12 + (new Date().getMonth() - new Date(masReciente.fecha).getMonth());
+    document.getElementById('cmp-avisoDesactualizado').style.display = meses >= 6 ? 'block' : 'none';
+
+    const filasCron = [...filas].sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+    const maxPrecio = Math.max(...filasCron.map(f => f.precio));
+    document.getElementById('cmp-chartBars').innerHTML = filasCron.map((f, i) => {
+      const alturaPct = maxPrecio > 0 ? (f.precio / maxPrecio) * 100 : 0;
+      return `<div class="bar-col ${i === filasCron.length - 1 ? 'mas-reciente' : ''}"><div class="bar" style="height:${alturaPct}%;"></div><div class="bar-label">${f.precio.toFixed(2)}€<br>${new Date(f.fecha).toLocaleDateString('es-ES',{month:'short',year:'2-digit'})}</div></div>`;
+    }).join('');
+
+    document.getElementById('cmp-tablaHistorial').innerHTML = filas.map((f, i) => `
+      <tr>
+        <td>${f.proveedor}${i === 0 ? '<span class="tag-recent">más reciente</span>' : ''}</td>
+        <td class="price">${f.precio.toFixed(2)} €</td>
+        <td>${formatearFecha(f.fecha)}</td>
+        <td>${f.numero || '—'}</td>
+        <td><button class="btn-dark" style="font-size:11.5px; padding:5px 10px;" onclick="cmpDescargarAlbaran(${JSON.stringify(f.archivoUrl)})">⬇ Descargar</button></td>
+      </tr>
+    `).join('');
+
+    estado.textContent = ''; resultados.style.display = 'block';
+  }
+
+  // Descarga el archivo original del albarán desde Storage (bucket privado),
+  // usando una URL temporal firmada, para poder enseñárselo al cliente como justificante.
+  async function cmpDescargarAlbaran(archivoUrl){
+    if(!archivoUrl){ alert("Este albarán no tiene archivo original guardado."); return; }
+    const { data, error } = await client.storage.from('albaranes').createSignedUrl(archivoUrl, 60);
+    if(error){ alert("No se pudo generar el enlace de descarga: " + error.message); return; }
+    window.open(data.signedUrl, '_blank');
+  }
+
+  // ================================================================
+  // ========================== PRESUPUESTOS ==========================
+  // ================================================================
+  let preMaterialesCache = [], preFilasPresupuesto = [];
+
+  async function preCargarMateriales(){
+    const { data } = await client.from('materiales').select('id, nombre_canonico, precio_manual, fecha_manual');
+    preMaterialesCache = data || [];
+  }
+
+  document.getElementById('pre-archivo').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if(!file) return;
+    const estado = document.getElementById('pre-estado');
+    document.getElementById('pre-zonaTabla').style.display = 'none';
+    estado.textContent = "Leyendo el archivo...";
+    try {
+      let textoBruto = '';
+      if(file.name.match(/\.(xlsx|xls)$/i)) textoBruto = await preLeerExcel(file);
+      else if(file.type === 'application/pdf'){
+        textoBruto = await preLeerPdf(file);
+        if(textoBruto.trim().length < 15){
+          estado.textContent = "El PDF parece escaneado, leyendo con IA de visión...";
+          textoBruto = await preLeerImagenConIA(await prePdfAImagen(file));
+        }
+      } else if(file.name.match(/\.docx$/i)) textoBruto = await preLeerWord(file);
+      else if(file.type.startsWith('image/')){
+        const base64 = await preLeerComoBase64(file);
+        estado.textContent = "Leyendo la imagen con IA...";
+        textoBruto = await preLeerImagenConIA(base64);
+      } else throw new Error("Formato no soportado.");
+
+      estado.textContent = "Identificando materiales y cantidades...";
+      const { materiales, incompleto } = await preExtraerListaMaterialesEnBloques(textoBruto);
+
+      await preCargarMateriales();
+      await preConstruirFilasPresupuesto(materiales);
+      preRenderizarTabla();
+      estado.innerHTML = incompleto ? `<span class="error">⚠ Alguna parte de la lista no se pudo leer del todo. Revisa la tabla comparándola con tu documento original.</span>` : '';
+      document.getElementById('pre-zonaTabla').style.display = 'block';
+    } catch(err){ estado.innerHTML = `<span class="error">Error: ${err.message.replace(/</g,'&lt;')}</span>`; }
+  });
+
+  async function preLeerExcel(file){
+    const buffer = await file.arrayBuffer();
+    const wb = XLSX.read(buffer, { type: 'array' });
+    let texto = '';
+    wb.SheetNames.forEach(nombreHoja => {
+      const filas = XLSX.utils.sheet_to_json(wb.Sheets[nombreHoja], { header: 1 });
+      filas.forEach(fila => { texto += fila.join(' | ') + '\n'; });
+    });
+    return texto;
+  }
+  async function preLeerPdf(file){
+    const buffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+    let texto = '';
+    for(let n = 1; n <= pdf.numPages; n++){
+      const page = await pdf.getPage(n);
+      const content = await page.getTextContent();
+      const items = content.items.map(it => ({ str: it.str, x: it.transform[4], y: it.transform[5] })).filter(it => it.str.trim());
+      items.sort((a, b) => b.y - a.y || a.x - b.x);
+      const lineas = []; let actual = []; let yAct = null;
+      for(const it of items){
+        if(yAct === null || Math.abs(it.y - yAct) > 3){ if(actual.length) lineas.push(actual); actual = [it]; yAct = it.y; }
+        else actual.push(it);
+      }
+      if(actual.length) lineas.push(actual);
+      lineas.forEach(l => { l.sort((a,b) => a.x - b.x); texto += l.map(i => i.str).join(' | ') + '\n'; });
+    }
+    return texto;
+  }
+  async function preLeerWord(file){
+    const buffer = await file.arrayBuffer();
+    return (await mammoth.extractRawText({ arrayBuffer: buffer })).value;
+  }
+  async function preLeerComoBase64(file){
+    return new Promise((res) => { const reader = new FileReader(); reader.onload = (e) => res(e.target.result); reader.readAsDataURL(file); });
+  }
+  async function prePdfAImagen(file){
+    const buffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+    const page = await pdf.getPage(1);
+    const viewport = page.getViewport({ scale: 3 });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width; canvas.height = viewport.height;
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    return canvas.toDataURL('image/png');
+  }
+  async function preLeerImagenConIA(base64){
+    return await llamarGroq([{ role: "user", content: [
+      { type: "text", text: "Transcribe todo el texto de esta imagen, manteniendo el orden de la tabla, columnas separadas por ' | '. Solo transcribe." },
+      { type: "image_url", image_url: { url: base64 } }
+    ] }], 700);
+  }
+
+  function preDividirEnBloques(texto, lineasPorBloque){
+    const lineas = texto.split('\n').filter(l => l.trim().length > 0);
+    const bloques = [];
+    for(let i = 0; i < lineas.length; i += lineasPorBloque) bloques.push(lineas.slice(i, i + lineasPorBloque).join('\n'));
+    return bloques.length ? bloques : [texto];
+  }
+  async function preExtraerListaMaterialesEnBloques(texto){
+    const bloques = preDividirEnBloques(texto, 12);
+    let materialesTotal = [], algunoIncompleto = false;
+    const estado = document.getElementById('pre-estado');
+    for(let i = 0; i < bloques.length; i++){
+      if(i > 0){
+        estado.textContent = `Bloque ${i} de ${bloques.length} completado. Esperando 65s antes del siguiente...`;
+        await esperar(65000);
+      }
+      if(bloques.length > 1) estado.textContent = `Identificando materiales — bloque ${i + 1} de ${bloques.length}...`;
+      const resultado = await preExtraerListaMateriales(bloques[i]);
+      materialesTotal = materialesTotal.concat(resultado.materiales);
+      if(resultado.incompleto) algunoIncompleto = true;
+    }
+    return { materiales: materialesTotal, incompleto: algunoIncompleto };
+  }
+  async function preExtraerListaMateriales(texto){
+    const prompt = `De este texto (una parte de una lista o tabla de materiales), extrae cada material con su cantidad. Responde SOLO con este JSON, sin explicaciones:
+{"materiales":[{"descripcion":"","cantidad":0}]}
+Importante: en estas tablas, cada fila suele empezar con un código de referencia (ignóralo) y terminar con la cantidad real, normalmente el ÚLTIMO número de la fila. No confundas el código con la cantidad.
+Si una cantidad no aparece con claridad, usa 1. No inventes materiales. Sé breve en las descripciones. Ignora cabeceras de tabla o texto administrativo.
+Texto:
+"""${texto}"""`;
+    const respuesta = await llamarGroqConReintento([{ role: "user", content: prompt }], 800,
+      "Límite de la IA alcanzado, esperando antes de seguir con el siguiente bloque...", document.getElementById('pre-estado'));
+    return preRepararYParsearMateriales(respuesta);
+  }
+  function preRepararYParsearMateriales(respuesta){
+    const inicio = respuesta.indexOf('{');
+    let bruto = respuesta.slice(inicio);
+    try { return { materiales: (JSON.parse(bruto).materiales) || [], incompleto: false }; }
+    catch(e){
+      const ultimoCierre = bruto.lastIndexOf('}');
+      if(ultimoCierre === -1) throw new Error("La IA no devolvió datos utilizables.");
+      try { return { materiales: (JSON.parse(bruto.slice(0, ultimoCierre + 1) + ']}').materiales) || [], incompleto: true }; }
+      catch(e2){ throw new Error("No se pudo interpretar la respuesta de la IA."); }
+    }
+  }
+
+  async function preConstruirFilasPresupuesto(materiales){
+    preFilasPresupuesto = [];
+    for(const m of materiales){
+      const exacto = preMaterialesCache.find(mc => esIgual(mc.nombre_canonico, m.descripcion));
+      if(exacto){
+        const precio = await obtenerPrecioMasReciente(exacto.id, exacto.precio_manual);
+        preFilasPresupuesto.push({ descripcion: m.descripcion, cantidad: m.cantidad || 1, precio, materialId: exacto.id, origen: precio !== null ? 'auto' : 'sin_datos' });
+      } else {
+        const candidatos = preMaterialesCache.map(mc => ({ ...mc, score: similitud(m.descripcion, mc.nombre_canonico) }))
+          .filter(mc => mc.score > 0.35).sort((a, b) => b.score - a.score).slice(0, 3);
+        preFilasPresupuesto.push({ descripcion: m.descripcion, cantidad: m.cantidad || 1, precio: null, materialId: null, origen: 'sin_datos', candidatos });
+      }
+    }
+  }
+
+  function preRenderizarTabla(){
+    document.getElementById('pre-cuerpoTabla').innerHTML = preFilasPresupuesto.map((f, idx) => {
+      if(f.origen !== 'sin_datos'){
+        return `<tr><td>${f.descripcion}</td><td>${f.cantidad}</td><td class="price">${f.precio.toFixed(2)} €</td><td class="price">${(f.precio * f.cantidad).toFixed(2)} €</td></tr>`;
+      } else {
+        const opciones = (f.candidatos || []).map(c => `<option value="${c.id}">Usar: ${c.nombre_canonico} (${Math.round(c.score*100)}%)</option>`).join('');
+        return `<tr class="sin-datos" data-idx="${idx}"><td>${f.descripcion}</td><td>${f.cantidad}</td><td colspan="2">
+          <span class="warn-badge">⚠ Sin datos</span>
+          <input type="text" class="precio-input" placeholder="0,00" onchange="preActualizarPrecioManual(${idx}, this.value)">
+          ${opciones ? `<br><select class="select-parecido" onchange="preUsarCandidato(${idx}, this.value)"><option value="">¿Es uno de estos?</option>${opciones}</select>` : ''}
+        </td></tr>`;
+      }
+    }).join('');
+    preActualizarTotal();
+  }
+  function preActualizarTotal(){
+    const total = preFilasPresupuesto.reduce((sum, f) => sum + (f.precio ? f.precio * f.cantidad : 0), 0);
+    document.getElementById('pre-totalEstimado').textContent = formatearEuros(total);
+  }
+  window.preActualizarPrecioManual = async function(idx, valor){
+    const precio = parseFloat(valor.replace(',', '.'));
+    if(isNaN(precio)) return;
+    const fila = preFilasPresupuesto[idx];
+    fila.precio = precio; fila.origen = 'manual';
+    if(fila.materialId){
+      await client.from('materiales').update({ precio_manual: precio, fecha_manual: new Date().toISOString().slice(0,10) }).eq('id', fila.materialId);
+    } else {
+      const { data } = await client.from('materiales').insert([{ nombre_canonico: fila.descripcion, precio_manual: precio, fecha_manual: new Date().toISOString().slice(0,10) }]).select().single();
+      fila.materialId = data.id; preMaterialesCache.push(data);
+    }
+    preRenderizarTabla();
+  };
+  window.preUsarCandidato = async function(idx, materialId){
+    if(!materialId) return;
+    const fila = preFilasPresupuesto[idx];
+    const material = preMaterialesCache.find(m => m.id === materialId);
+    fila.materialId = materialId;
+    const precio = await obtenerPrecioMasReciente(material.id, material.precio_manual);
+    fila.precio = precio; fila.origen = precio !== null ? 'auto' : 'sin_datos';
+    preRenderizarTabla();
+  };
+  function preDescargarExcel(){
+    const filasExcel = preFilasPresupuesto.map(f => ({
+      'Material': f.descripcion, 'Cantidad': f.cantidad,
+      'Precio unitario (€)': f.precio !== null ? f.precio : 'SIN DATOS',
+      'Total (€)': f.precio !== null ? (f.precio * f.cantidad).toFixed(2) : ''
+    }));
+    const total = preFilasPresupuesto.reduce((sum, f) => sum + (f.precio ? f.precio * f.cantidad : 0), 0);
+    filasExcel.push({ 'Material': '', 'Cantidad': '', 'Precio unitario (€)': 'TOTAL', 'Total (€)': total.toFixed(2) });
+    const hoja = XLSX.utils.json_to_sheet(filasExcel);
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, hoja, 'Presupuesto');
+    XLSX.writeFile(libro, `presupuesto_${new Date().toISOString().slice(0,10)}.xlsx`);
+  }
+
+  // ================================================================
+  // ========================== PROVEEDORES ==========================
+  // ================================================================
+  const PROV_PASSWORD = "9190";
+  let provAlbaranesData = [];
+
+  function provComprobarPassword(){
+    const valor = document.getElementById('prov-passInput').value;
+    if(valor === PROV_PASSWORD){
+      document.getElementById('prov-lockScreen').style.display = 'none';
+      document.getElementById('prov-contenido').style.display = 'block';
+      provCargarDatos();
+    } else document.getElementById('prov-lockError').style.display = 'block';
+  }
+  document.getElementById('prov-passInput').addEventListener('keydown', (e) => { if(e.key === 'Enter') provComprobarPassword(); });
+
+  async function provCargarDatos(){
+    const estado = document.getElementById('prov-estado');
+    const { data, error } = await client.from('albaranes').select('fecha, importe_total, proveedores(nombre)');
+    if(error){ estado.innerHTML = `<span class="error">Error: ${error.message}</span>`; return; }
+    provAlbaranesData = (data || []).filter(a => a.fecha && a.proveedores);
+    if(provAlbaranesData.length === 0){ estado.textContent = "Todavía no hay albaranes guardados con importe y fecha."; return; }
+
+    const anios = [...new Set(provAlbaranesData.map(a => new Date(a.fecha).getFullYear()))].sort((a,b) => b - a);
+    document.getElementById('prov-selectorAnio').innerHTML = anios.map(a => `<option value="${a}">${a}</option>`).join('');
+    estado.style.display = 'none';
+    document.getElementById('prov-zonaDatos').style.display = 'block';
+    provRenderizarAnio();
+  }
+
+  function provRenderizarAnio(){
+    const anio = parseInt(document.getElementById('prov-selectorAnio').value);
+    document.getElementById('prov-anioTotal').textContent = anio;
+    const delAnio = provAlbaranesData.filter(a => new Date(a.fecha).getFullYear() === anio);
+    const totalAnio = delAnio.reduce((s, a) => s + (parseFloat(a.importe_total) || 0), 0);
+    document.getElementById('prov-totalAnio').textContent = formatearEuros(totalAnio);
+
+    const porProveedor = {};
+    delAnio.forEach(a => {
+      const nombre = a.proveedores.nombre;
+      if(!porProveedor[nombre]) porProveedor[nombre] = { total: 0, meses: Array(12).fill(0) };
+      const importe = parseFloat(a.importe_total) || 0;
+      porProveedor[nombre].total += importe;
+      porProveedor[nombre].meses[new Date(a.fecha).getMonth()] += importe;
+    });
+    const lista = Object.entries(porProveedor).map(([nombre, d]) => ({ nombre, ...d })).sort((a, b) => b.total - a.total);
+
+    const maxTotal = Math.max(...lista.map(p => p.total), 1);
+    document.getElementById('prov-zonaBarras').innerHTML = lista.map(p => `
+      <div class="prov-bar-row">
+        <div class="prov-bar-name">${p.nombre}</div>
+        <div class="prov-bar-track"><div class="prov-bar-fill" style="width:${(p.total / maxTotal) * 100}%;"></div></div>
+        <div class="prov-bar-amount">${formatearEuros(p.total)}</div>
+      </div>`).join('');
+
+    const nombresMeses = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+    document.getElementById('prov-tablaProveedores').innerHTML = lista.map((p, idx) => {
+      const eneJun = p.meses.slice(0, 6).reduce((a,b) => a+b, 0);
+      const julDic = p.meses.slice(6, 12).reduce((a,b) => a+b, 0);
+      const filaMeses = nombresMeses.map((m, i) => `<div>${m}: <span class="num">${formatearEuros(p.meses[i])}</span></div>`).join('');
+      return `
+        <tr class="fila-proveedor" onclick="provToggleDetalle(${idx})">
+          <td>${p.nombre}</td><td class="price">${formatearEuros(eneJun)}</td><td class="price">${formatearEuros(julDic)}</td><td class="price">${formatearEuros(p.total)}</td>
+        </tr>
+        <tr class="meses-detalle" id="prov-detalle-${idx}"><td colspan="4"><div class="meses-grid">${filaMeses}</div></td></tr>
+      `;
+    }).join('');
+  }
+  function provToggleDetalle(idx){
+    const fila = document.getElementById(`prov-detalle-${idx}`);
+    fila.style.display = fila.style.display === 'table-row' ? 'none' : 'table-row';
+  }
+
+  // Estas funciones se llaman desde botones en el HTML (onclick/onchange),
+  // así que hay que exponerlas explícitamente porque ahora viven dentro de iniciarApp().
+  window.showPanel = showPanel;
+  window.albGuardarTodo = albGuardarTodo;
+  window.cmpBuscarDesdeInput = cmpBuscarDesdeInput;
+  window.cmpDescargarAlbaran = cmpDescargarAlbaran;
+  window.preDescargarExcel = preDescargarExcel;
+  window.provComprobarPassword = provComprobarPassword;
+  window.provToggleDetalle = provToggleDetalle;
+  window.provRenderizarAnio = provRenderizarAnio;
+
+  } // fin de iniciarApp()
+</script>
+
+</body>
+</html>
