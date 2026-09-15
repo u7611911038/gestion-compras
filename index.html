@@ -194,6 +194,12 @@
       <img id="alb-preview">
       <div class="estado-msg" id="alb-estado" style="margin-top:14px;">Esperando un archivo...</div>
 
+      <div id="alb-botonesTamano" style="display:none; margin:14px 0;">
+        <p style="font-size:13px; color:var(--ink-soft); margin-bottom:8px;">¿Cuántas líneas de material tiene este documento?</p>
+        <button class="btn-dark" onclick="albExtraerDatos()">📄 Albarán corto (pocas líneas)</button>
+        <button class="btn-primary" onclick="albExtraerDatosLargo()">📚 Albarán largo (muchas líneas)</button>
+      </div>
+
       <div id="alb-zonaRevision" style="display:none; margin-top:20px;">
         <h3 style="font-size:15px;">Datos de cabecera</h3>
         <div class="campo-cabecera"><label>Proveedor:</label>
@@ -234,14 +240,14 @@
             <div class="compare-price" id="cmp-precioReciente">—</div>
             <div class="compare-meta" id="cmp-metaReciente">—</div>
             <div id="cmp-avisoDesactualizado" style="display:none;" class="warn-badge">⚠ Precio con más de 6 meses</div>
-            <div style="margin-top:10px;"><button class="btn-dark" id="cmp-descargarReciente" style="font-size:12px; padding:7px 12px;">⬇ Descargar albarán</button></div>
+            <div style="margin-top:10px;"><button class="btn-dark" id="cmp-descargarReciente" style="font-size:12px; padding:7px 12px;">👁 Ver albarán</button></div>
           </div>
           <div class="compare-card cheap">
             <div class="compare-eyebrow">📉 Más barato histórico</div>
             <div class="compare-provider" id="cmp-provBarato">—</div>
             <div class="compare-price" id="cmp-precioBarato">—</div>
             <div class="compare-meta" id="cmp-metaBarato">—</div>
-            <div style="margin-top:10px;"><button class="btn-dark" id="cmp-descargarBarato" style="font-size:12px; padding:7px 12px;">⬇ Descargar albarán</button></div>
+            <div style="margin-top:10px;"><button class="btn-dark" id="cmp-descargarBarato" style="font-size:12px; padding:7px 12px;">👁 Ver albarán</button></div>
           </div>
         </div>
         <h3 style="font-size:15px;">Evolución de precio</h3>
@@ -457,7 +463,8 @@
     }
 
     await Promise.all([albCargarProveedores(), albCargarMateriales()]);
-    await albExtraerDatos();
+    estado.textContent = "Archivo listo. Elige el tamaño del albarán abajo para extraer los datos.";
+    document.getElementById('alb-botonesTamano').style.display = 'block';
   });
 
   async function albCargarProveedores(){
@@ -492,6 +499,75 @@ Texto:
       albDatosExtraidos = JSON.parse(respuesta.slice(inicio, fin + 1));
       albMostrarRevision();
       estado.textContent = "Datos extraídos. Revisa y confirma antes de guardar.";
+    } catch(err){ estado.innerHTML = `<span class="error">Error: ${err.message}</span>`; }
+  }
+
+  // ---- Extracción para albaranes largos: cabecera aparte + líneas por bloques ----
+  const ALB_PROMPT_CABECERA = (texto) => `De este documento de compra español, extrae SOLO estos datos generales. Responde SOLO con este JSON, sin explicaciones:
+{"fecha":"YYYY-MM-DD","numero_albaran":"","importe_total":0.00}
+fecha = "Fecha Pedido/Albarán/Factura". numero_albaran = "Nº Pedido/Albarán/Factura". importe_total = el total final (no la Base Imponible). Usa null si no aparece.
+Texto:
+"""${texto}"""`;
+
+  const ALB_PROMPT_LINEAS_BLOQUE = (texto) => `De este fragmento de un documento de compra, extrae cada línea de material con su cantidad, precio unitario y precio total (si aparecen). Responde SOLO con este JSON, sin explicaciones:
+{"lineas":[{"descripcion":"","cantidad":0,"precio_unitario":0.00,"precio_total":0.00}]}
+Usa null si un dato no aparece con claridad. No inventes líneas que no estén en el texto. Sé breve en las descripciones. Ignora cabeceras de tabla o texto administrativo sin un material real.
+Texto:
+"""${texto}"""`;
+
+  function albRepararYParsearLineas(respuesta){
+    const inicio = respuesta.indexOf('{');
+    let bruto = respuesta.slice(inicio);
+    try { return { lineas: (JSON.parse(bruto).lineas) || [], incompleto: false }; }
+    catch(e){
+      const ultimoCierre = bruto.lastIndexOf('}');
+      if(ultimoCierre === -1) throw new Error("La IA no devolvió datos utilizables.");
+      try { return { lineas: (JSON.parse(bruto.slice(0, ultimoCierre + 1) + ']}').lineas) || [], incompleto: true }; }
+      catch(e2){ throw new Error("No se pudo interpretar la respuesta de la IA."); }
+    }
+  }
+
+  async function albExtraerLineasEnBloques(texto){
+    const estado = document.getElementById('alb-estado');
+    const bloques = preDividirEnBloques(texto, 12); // función compartida, definida más abajo en Presupuestos
+    let lineasTotal = [], algunoIncompleto = false;
+    for(let i = 0; i < bloques.length; i++){
+      if(i > 0){
+        estado.textContent = `Bloque ${i} de ${bloques.length} completado. Esperando 65s antes del siguiente (límite de la cuenta gratuita)...`;
+        await esperar(65000);
+      }
+      if(bloques.length > 1) estado.textContent = `Extrayendo líneas — bloque ${i + 1} de ${bloques.length}...`;
+      const respuesta = await llamarGroqConReintento([{ role: "user", content: ALB_PROMPT_LINEAS_BLOQUE(bloques[i]) }], 800,
+        "Límite de la IA alcanzado, esperando antes de seguir con el siguiente bloque...", estado);
+      const resultado = albRepararYParsearLineas(respuesta);
+      lineasTotal = lineasTotal.concat(resultado.lineas);
+      if(resultado.incompleto) algunoIncompleto = true;
+    }
+    return { lineas: lineasTotal, incompleto: algunoIncompleto };
+  }
+
+  async function albExtraerDatosLargo(){
+    const estado = document.getElementById('alb-estado');
+    try {
+      let texto;
+      if(albTextoExtraidoPDF) texto = albTextoExtraidoPDF;
+      else {
+        estado.textContent = "Leyendo la imagen con IA...";
+        texto = await llamarGroq([{ role:"user", content:[{type:"text", text:ALB_PROMPT_OCR},{type:"image_url", image_url:{url:albBase64Actual}}] }], 900);
+      }
+
+      estado.textContent = "Extrayendo datos de cabecera...";
+      const respuestaCabecera = await llamarGroqConReintento([{ role: "user", content: ALB_PROMPT_CABECERA(texto) }], 150,
+        "Límite de la IA alcanzado, esperando...", estado);
+      const iC = respuestaCabecera.indexOf('{'), fC = respuestaCabecera.lastIndexOf('}');
+      const cabecera = JSON.parse(respuestaCabecera.slice(iC, fC + 1));
+
+      const { lineas, incompleto } = await albExtraerLineasEnBloques(texto);
+      albDatosExtraidos = { fecha: cabecera.fecha, numero_albaran: cabecera.numero_albaran, importe_total: cabecera.importe_total, lineas };
+      albMostrarRevision();
+      estado.innerHTML = incompleto
+        ? `<span class="error">⚠ Alguna parte de la lista no se pudo leer del todo. Revisa comparando con el documento original.</span>`
+        : "Datos extraídos. Revisa y confirma antes de guardar.";
     } catch(err){ estado.innerHTML = `<span class="error">Error: ${err.message}</span>`; }
   }
 
@@ -537,14 +613,52 @@ Texto:
 
       const tr = document.createElement('tr');
       tr.dataset.idx = idx;
-      let selectHtml;
+
+      // Descripción, cantidad y precio son editables (por si la IA se equivoca al leer)
+      const tdDesc = document.createElement('td');
+      const inputDesc = document.createElement('input');
+      inputDesc.type = 'text'; inputDesc.className = 'input-descripcion'; inputDesc.style.width = '100%';
+      inputDesc.value = linea.descripcion || '';
+      tdDesc.appendChild(inputDesc); tr.appendChild(tdDesc);
+
+      const tdCant = document.createElement('td');
+      const inputCant = document.createElement('input');
+      inputCant.type = 'text'; inputCant.className = 'input-cantidad'; inputCant.style.width = '55px';
+      inputCant.value = linea.cantidad ?? '';
+      tdCant.appendChild(inputCant); tr.appendChild(tdCant);
+
+      const tdPrecio = document.createElement('td');
+      const inputPrecio = document.createElement('input');
+      inputPrecio.type = 'text'; inputPrecio.className = 'input-precio'; inputPrecio.style.width = '70px';
+      inputPrecio.value = linea.precio_unitario ?? '';
+      tdPrecio.appendChild(inputPrecio); tr.appendChild(tdPrecio);
+
+      const tdMaterial = document.createElement('td');
       if(hayExacto){
-        selectHtml = `<span class="tag-recent">✓ vinculado: ${hayExacto.nombre_canonico}</span><input type="hidden" class="select-material" data-tipo="existente" data-id="${hayExacto.id}">`;
+        const span = document.createElement('span');
+        span.className = 'tag-recent';
+        span.textContent = `✓ vinculado: ${hayExacto.nombre_canonico}`;
+        const inputHidden = document.createElement('input');
+        inputHidden.type = 'hidden'; inputHidden.className = 'select-material';
+        inputHidden.dataset.tipo = 'existente'; inputHidden.dataset.id = hayExacto.id;
+        tdMaterial.appendChild(span); tdMaterial.appendChild(inputHidden);
       } else {
-        const opciones = candidatos.map(c => `<option value="existente:${c.id}">Usar: ${c.nombre_canonico} (${Math.round(c.score*100)}%)</option>`).join('');
-        selectHtml = `<select class="select-material">${opciones}<option value="nuevo" ${candidatos.length === 0 ? 'selected' : ''}>➕ Crear nuevo</option></select>`;
+        const select = document.createElement('select');
+        select.className = 'select-material';
+        candidatos.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = `existente:${c.id}`;
+          opt.textContent = `Usar: ${c.nombre_canonico} (${Math.round(c.score*100)}%)`;
+          select.appendChild(opt);
+        });
+        const optNuevo = document.createElement('option');
+        optNuevo.value = 'nuevo';
+        optNuevo.textContent = '➕ Crear nuevo';
+        if(candidatos.length === 0) optNuevo.selected = true;
+        select.appendChild(optNuevo);
+        tdMaterial.appendChild(select);
       }
-      tr.innerHTML = `<td>${linea.descripcion || ''}</td><td>${linea.cantidad ?? ''}</td><td>${linea.precio_unitario ?? ''}</td><td>${selectHtml}</td>`;
+      tr.appendChild(tdMaterial);
       cuerpo.appendChild(tr);
     });
     document.getElementById('alb-zonaRevision').style.display = 'block';
@@ -583,21 +697,24 @@ Texto:
       const filas = [...document.getElementById('alb-cuerpoLineas').querySelectorAll('tr')];
       for(const fila of filas){
         const idx = fila.dataset.idx;
-        const linea = albDatosExtraidos.lineas[idx];
+        const descripcion = fila.querySelector('.input-descripcion').value.trim();
+        const cantidad = parseFloat(fila.querySelector('.input-cantidad').value.replace(',', '.')) || null;
+        const precioUnitario = parseFloat(fila.querySelector('.input-precio').value.replace(',', '.')) || null;
+        const precioTotal = (cantidad !== null && precioUnitario !== null) ? +(cantidad * precioUnitario).toFixed(2) : null;
         const selectorMaterial = fila.querySelector('.select-material');
         let materialId;
         if(selectorMaterial.tagName === 'INPUT') materialId = selectorMaterial.dataset.id;
         else {
           const valor = selectorMaterial.value;
           if(valor === 'nuevo'){
-            const { data, error } = await client.from('materiales').insert([{ nombre_canonico: linea.descripcion }]).select().single();
+            const { data, error } = await client.from('materiales').insert([{ nombre_canonico: descripcion }]).select().single();
             if(error) throw error;
             materialId = data.id; albMaterialesCache.push(data);
           } else materialId = valor.split(':')[1];
         }
         const { error: errorLinea } = await client.from('lineas_albaran').insert([{
-          albaran_id: albaran.id, material_id: materialId, descripcion_original: linea.descripcion,
-          cantidad: linea.cantidad, precio_unitario: linea.precio_unitario, precio_total: linea.precio_total
+          albaran_id: albaran.id, material_id: materialId, descripcion_original: descripcion,
+          cantidad: cantidad, precio_unitario: precioUnitario, precio_total: precioTotal
         }]);
         if(errorLinea) throw errorLinea;
       }
@@ -685,7 +802,7 @@ Texto:
         <td class="price">${f.precio.toFixed(2)} €</td>
         <td>${formatearFecha(f.fecha)}</td>
         <td>${f.numero || '—'}</td>
-        <td><button class="btn-dark" style="font-size:11.5px; padding:5px 10px;" onclick="cmpDescargarAlbaran(${JSON.stringify(f.archivoUrl)})">⬇ Descargar</button></td>
+        <td><button class="btn-dark" style="font-size:11.5px; padding:5px 10px;" onclick="cmpDescargarAlbaran(${JSON.stringify(f.archivoUrl)})">👁 Ver</button></td>
       </tr>
     `).join('');
 
@@ -988,6 +1105,8 @@ Texto:
   // Estas funciones se llaman desde botones en el HTML (onclick/onchange),
   // así que hay que exponerlas explícitamente porque ahora viven dentro de iniciarApp().
   window.showPanel = showPanel;
+  window.albExtraerDatos = albExtraerDatos;
+  window.albExtraerDatosLargo = albExtraerDatosLargo;
   window.albGuardarTodo = albGuardarTodo;
   window.cmpBuscarDesdeInput = cmpBuscarDesdeInput;
   window.cmpDescargarAlbaran = cmpDescargarAlbaran;
