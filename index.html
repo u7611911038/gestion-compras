@@ -200,8 +200,9 @@
 
       <div id="alb-botonesTamano" style="display:none; margin:14px 0;">
         <p style="font-size:13px; color:var(--ink-soft); margin-bottom:8px;">¿Cuántas líneas de material tiene este documento?</p>
-        <button class="btn-dark" onclick="albExtraerDatos()">📄 Albarán corto (pocas líneas)</button>
-        <button class="btn-primary" onclick="albExtraerDatosLargo()">📚 Albarán largo / factura con varios albaranes</button>
+        <button class="btn-dark" id="alb-btnCorto" onclick="albExtraerDatos()">📄 Albarán corto (pocas líneas)</button>
+        <button class="btn-primary" id="alb-btnLargo" onclick="albExtraerDatosLargo()">📚 Albarán largo / factura con varios albaranes</button>
+        <button id="alb-btnCancelar" onclick="albCancelarProceso()" style="display:none; background:var(--rust); color:#fff; border:none; padding:9px 16px; border-radius:4px; font-size:13px; cursor:pointer; margin-left:8px;">✕ Cancelar</button>
       </div>
 
       <div id="alb-zonaRevision" style="display:none; margin-top:20px;">
@@ -401,6 +402,14 @@
     if(!response.ok) throw new Error(JSON.stringify(data, null, 2));
     return data.choices[0].message.content;
   }
+  async function esperarConCuentaAtras(segundos, elementoEstado, mensajeBase){
+    for(let s = segundos; s > 0; s--){
+      if(typeof albCancelado !== 'undefined' && albCancelado) return;
+      if(elementoEstado) elementoEstado.textContent = `${mensajeBase} (${s}s)...`;
+      await esperar(1000);
+    }
+  }
+
   async function llamarGroqConReintento(messages, maxTokens, mensajeEspera, elementoEstado){
     const maxIntentos = 3;
     for(let intento = 1; intento <= maxIntentos; intento++){
@@ -408,8 +417,10 @@
       catch(err){
         const esLimite = err.message.includes('rate_limit_exceeded');
         if(esLimite && intento < maxIntentos){
-          if(elementoEstado) elementoEstado.textContent = mensajeEspera || `Límite de la IA alcanzado, esperando (intento ${intento}/${maxIntentos})...`;
-          await esperar(65000);
+          await esperarConCuentaAtras(65, elementoEstado, mensajeEspera || `Límite de la IA alcanzado, esperando (intento ${intento}/${maxIntentos})`);
+        } else if(esLimite){
+          if(elementoEstado) elementoEstado.innerHTML = `<span class="error">Se agotaron los reintentos: el límite de la IA sigue lleno. Puede que hayas alcanzado el límite DIARIO de tu cuenta gratuita de Groq (no solo el de por minuto). Revisa console.groq.com/settings/limits o inténtalo más tarde / mañana.</span>`;
+          throw err;
         } else throw err;
       }
     }
@@ -482,6 +493,8 @@ Texto:
 
   async function albExtraerDatos(){
     const estado = document.getElementById('alb-estado');
+    const btnCorto = document.getElementById('alb-btnCorto'), btnLargo = document.getElementById('alb-btnLargo');
+    btnCorto.disabled = true; btnLargo.disabled = true;
     try {
       let texto;
       if(albTextoExtraidoPDF){ estado.textContent = "Organizando los datos del PDF..."; texto = albTextoExtraidoPDF; }
@@ -501,7 +514,10 @@ Texto:
       }];
       albMostrarRevision();
       estado.textContent = "Datos extraídos. Revisa y confirma antes de guardar.";
-    } catch(err){ estado.innerHTML = `<span class="error">Error: ${err.message}</span>`; }
+    } catch(err){
+      estado.innerHTML = `<span class="error">Error: ${err.message}</span>`;
+      btnCorto.disabled = false; btnLargo.disabled = false;
+    }
   }
 
   // ---- Extracción para albaranes largos: cabecera aparte (de respaldo) + líneas por bloques agrupadas ----
@@ -578,9 +594,10 @@ Texto:
     const bloques = albDividirEnBloquesPorGrupos(texto, 14);
     let lineasTotal = [], algunoIncompleto = false;
     for(let i = 0; i < bloques.length; i++){
+      if(albCancelado) return { lineas: lineasTotal, incompleto: algunoIncompleto };
       if(i > 0){
-        estado.textContent = `Bloque ${i} de ${bloques.length} completado. Esperando 65s antes del siguiente (límite de la cuenta gratuita)...`;
-        await esperar(65000);
+        await esperarConCuentaAtras(65, estado, `Bloque ${i} de ${bloques.length} completado. Esperando antes del siguiente`);
+        if(albCancelado) return { lineas: lineasTotal, incompleto: algunoIncompleto };
       }
       if(bloques.length > 1) estado.textContent = `Extrayendo líneas — bloque ${i + 1} de ${bloques.length}...`;
       const respuesta = await llamarGroqConReintento([{ role: "user", content: ALB_PROMPT_LINEAS_BLOQUE(bloques[i]) }], 900,
@@ -625,8 +642,25 @@ Texto:
     });
   }
 
+  let albCancelado = false;
+
+  function albMostrarCancelar(mostrar){
+    document.getElementById('alb-btnCancelar').style.display = mostrar ? 'inline-block' : 'none';
+  }
+  window.albCancelarProceso = function(){
+    albCancelado = true;
+    document.getElementById('alb-btnCorto').disabled = false;
+    document.getElementById('alb-btnLargo').disabled = false;
+    albMostrarCancelar(false);
+    document.getElementById('alb-estado').innerHTML = `<span class="error">Proceso cancelado por ti.</span>`;
+  };
+
   async function albExtraerDatosLargo(){
     const estado = document.getElementById('alb-estado');
+    const btnCorto = document.getElementById('alb-btnCorto'), btnLargo = document.getElementById('alb-btnLargo');
+    btnCorto.disabled = true; btnLargo.disabled = true;
+    albMostrarCancelar(true);
+    albCancelado = false;
     try {
       let texto;
       if(albTextoExtraidoPDF) texto = albTextoExtraidoPDF;
@@ -643,12 +677,19 @@ Texto:
       const cabecera = JSON.parse(respuestaCabecera.slice(iC, fC + 1));
 
       const { lineas, incompleto } = await albExtraerLineasEnBloques(texto);
+      if(albCancelado) return;
       albGruposExtraidos = albAgruparPorAlbaran(lineas, cabecera);
       albMostrarRevision();
+      albMostrarCancelar(false);
       estado.innerHTML = incompleto
         ? `<span class="error">⚠ Alguna parte de la lista no se pudo leer del todo. Revisa comparando con el documento original.</span>`
         : `Datos extraídos: ${albGruposExtraidos.length} albarán(es) detectado(s). Revisa y confirma antes de guardar.`;
-    } catch(err){ estado.innerHTML = `<span class="error">Error: ${err.message}</span>`; }
+    } catch(err){
+      if(albCancelado) return;
+      albMostrarCancelar(false);
+      estado.innerHTML = `<span class="error">Error: ${err.message}</span>`;
+      btnCorto.disabled = false; btnLargo.disabled = false;
+    }
   }
 
   async function albExtraerTextoYPreviewPdf(file){
@@ -1089,8 +1130,7 @@ Texto:
     const estado = document.getElementById('pre-estado');
     for(let i = 0; i < bloques.length; i++){
       if(i > 0){
-        estado.textContent = `Bloque ${i} de ${bloques.length} completado. Esperando 65s antes del siguiente...`;
-        await esperar(65000);
+        await esperarConCuentaAtras(65, estado, `Bloque ${i} de ${bloques.length} completado. Esperando antes del siguiente`);
       }
       if(bloques.length > 1) estado.textContent = `Identificando materiales — bloque ${i + 1} de ${bloques.length}...`;
       const resultado = await preExtraerListaMateriales(bloques[i]);
