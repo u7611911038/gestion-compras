@@ -831,9 +831,16 @@ Texto:
           else {
             const valor = selectorMaterial.value;
             if(valor === 'nuevo'){
-              const { data, error } = await client.from('materiales').insert([{ nombre_canonico: descripcion }]).select().single();
-              if(error) throw error;
-              materialId = data.id; albMaterialesCache.push(data);
+              // Puede que otra línea con la misma descripción ya haya creado este material
+              // hace un instante, dentro de este mismo guardado (por eso comprobamos primero).
+              const yaCreado = albMaterialesCache.find(m => esIgual(m.nombre_canonico, descripcion));
+              if(yaCreado){
+                materialId = yaCreado.id;
+              } else {
+                const { data, error } = await client.from('materiales').insert([{ nombre_canonico: descripcion }]).select().single();
+                if(error) throw error;
+                materialId = data.id; albMaterialesCache.push(data);
+              }
             } else materialId = valor.split(':')[1];
           }
           const { error: errorLinea } = await client.from('lineas_albaran').insert([{
@@ -1157,8 +1164,14 @@ Texto:
     if(fila.materialId){
       await client.from('materiales').update({ precio_manual: precio, fecha_manual: new Date().toISOString().slice(0,10) }).eq('id', fila.materialId);
     } else {
-      const { data } = await client.from('materiales').insert([{ nombre_canonico: fila.descripcion, precio_manual: precio, fecha_manual: new Date().toISOString().slice(0,10) }]).select().single();
-      fila.materialId = data.id; preMaterialesCache.push(data);
+      const yaCreado = preMaterialesCache.find(m => esIgual(m.nombre_canonico, fila.descripcion));
+      if(yaCreado){
+        fila.materialId = yaCreado.id;
+        await client.from('materiales').update({ precio_manual: precio, fecha_manual: new Date().toISOString().slice(0,10) }).eq('id', yaCreado.id);
+      } else {
+        const { data } = await client.from('materiales').insert([{ nombre_canonico: fila.descripcion, precio_manual: precio, fecha_manual: new Date().toISOString().slice(0,10) }]).select().single();
+        fila.materialId = data.id; preMaterialesCache.push(data);
+      }
     }
     preRenderizarTabla();
   };
